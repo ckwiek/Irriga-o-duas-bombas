@@ -1,0 +1,242 @@
+
+/*
+ * ***********************************************************************************************************************************************************
+ * Sobre o autor: Eng. Eletronico Carlos kwiek - www.cinedigital-brasil.com.br - e-mail para contato: carloskwiek1@hotmail.com - Rio de Janeiro RJ Brasil.
+ * Este programa é de dominio Publico, seu uso fica a criterio de quem quiser usar, embora testei tanto de forma simulada no Proteus como na protoboard,
+ * seu uso fica por conta e risco de quem o utilizar.
+ * ***********************************************************************************************************************************************************
+ * Meu proposito: Divulgar e difundir conhecimento para todos que se interessarem.
+ * *****************************************************************************************************************************************************************
+ * Descição breve de Funcionamento: Duas saidas que podem manejar dois relesShields, e estes por sua vez cargas maiores ou contatoras de acordo a potencia da carga.
+ * *****************************************************************************************************************************************************************
+ * As saidas ligam e desligam a cada 15 minutos alternadamente, ora bomba 1 ora bomba 2, esse ciclo esta definido para ocorrer das 06 horas até as 18 horas,
+ * e parar quando atinja o tempo, os tempos podem ser alterados, tanto do ciclo das bombas, como do ciclo total, apenas inserido novos valores nas variaveis.
+ * ****************************************************************************************************************************************************************
+ * Agradeço toda informacao sobre bugs ou problemas que possam ocorrer e tratarei dentro de minhas possibilidades responder.
+ * ****************************************************************************************************************************************************************
+ * As bibliotecas utilizadas encontran-se na biblioteca da IDE do Arduino.
+ * ***********************************************************************
+ * Hardware: Arduino UNO - RTC GROVE - Display LCD 16X2 - Um led.
+ * **************************************************************
+ * A função do led é apenas de indicador luminoso de sistema ligado.
+ * *****************************************************************
+ * O Display exibe o estado de todos os processos, inclusive sistema desligado aguardando hora de inicio.
+ * *****************************************************************************************************
+ */
+
+
+#include <Wire.h>
+#include <LiquidCrystal.h>
+#include <Time.h>  
+
+
+#define DS1307_ADDRESS 0x68
+
+
+/*criei essa estrutura, chamada horario, pra informar horario de inicio e de fim da execucao*/
+struct horario{
+  byte horaInicio;
+  byte minutoInicio;
+  byte horaFim;
+  byte minutoFim;
+};
+
+/*aqui, declarei um array do tipo horario, onde será informada a lista de horarios agendados*/
+horario horarios[] = { 
+  {18,0,4,0},          //das 18:00 até as 04:00 (termina dia seguinte)
+  {10,5,14,30}         //das 10:05 até as 14:30 (termina mesmo dia)
+  
+  //.... inclua aqui outros horarios, como feito acima, separados por virgula
+  //{horaInicio, minutoInicio, horaFim, minutoFim} 
+  //
+  //
+  //{horaInicio_1, minutoInicio_1, horaFim_1, minutoFim_1} , 
+  //{horaInicio_2, minutoInicio_2, horaFim_2, minutoFim_2} ,
+  //{horaInicio_3, minutoInicio_3, horaFim_3, minutoFim_3} ,
+  // ...
+  //{horaInicio_n, minutoInicio_n, horaFim_n, minutoFim_n} 
+};
+
+//calculo da constante com o a quantidade de horarios agendados.
+#define QUANTIDADE_HORARIOS sizeof(horarios) / sizeof(horario)
+
+// Inicializa o LCD
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+byte zero = 0x00;
+int  led = 13 ;
+int  bomba1 = 6;
+int  bomba2 = 7;
+int  led1 = 8;
+
+int minutosBomba1 = 15; //por quanto tempo ficara ligada a bomba 01. para ficar mais ou menos tempo ligado, mudar aqui
+int minutosBomba2 = 15; //por quanto tempo ficara ligada a bomba 02. para ficar mais ou menos tempo ligado, mudar aqui
+
+void setup() {
+  pinMode (led,    OUTPUT);
+  pinMode (bomba1, OUTPUT);
+  pinMode (bomba2, OUTPUT);
+  pinMode (led1,   OUTPUT);
+  // Define o LCD com 20 colunas e 4 linhas
+  lcd.begin(20, 4);
+  Wire.begin();
+  Serial.begin(9600);
+  // A linha abaixo pode ser retirada apos setar a data e hora
+  // SelecionaDataeHora();
+}
+
+void loop() {
+  Mostrarelogio();
+  delay(1000);
+}
+
+void SelecionaDataeHora() // Seta a data e a hora do DS1307
+{
+  byte segundos = 01; // Valores de 0 a 59
+  byte minutos = 04; // Valores de 0 a 59
+  byte horas = 23; // Valores de 0 a 23
+  byte diadasemana = 3; // Valores de 0 a 6 (0=Domingo, 1 = Segunda...)
+  byte diadomes = 12; // Valores de 1 a 31
+  byte mes = 8; // Valores de 1 a 12
+  byte ano = 15; // Valores de 0 a 99
+  Wire.beginTransmission(DS1307_ADDRESS);
+  // Stop no CI para que o mesmo possa receber os dados
+  Wire.write(zero);
+
+  // As linhas abaixo escrevem no CI os valores de
+  // data e hora que foram colocados nas variaveis acima
+  Wire.write(ConverteParaBCD(segundos));
+  Wire.write(ConverteParaBCD(minutos));
+  Wire.write(ConverteParaBCD(horas));
+  Wire.write(ConverteParaBCD(diadasemana));
+  Wire.write(ConverteParaBCD(diadomes));
+  Wire.write(ConverteParaBCD(mes));
+  Wire.write(ConverteParaBCD(ano));
+  Wire.write(zero); //Start no CI
+  Wire.endTransmission();
+}
+
+byte ConverteParaBCD(byte val)
+{
+  // Converte o número de decimal para BCD
+  return ( (val / 10 * 16) + (val % 10) );
+}
+
+byte ConverteparaDecimal(byte val)
+{
+  // Converte de BCD para decimal
+  return ( (val / 16 * 10) + (val % 16) );
+}
+
+void Mostrarelogio()
+{
+  Wire.beginTransmission(DS1307_ADDRESS);
+  Wire.write(zero);
+  Wire.endTransmission();
+  Wire.requestFrom(DS1307_ADDRESS, 7);
+  int segundos = ConverteparaDecimal(Wire.read());
+  int minutos = ConverteparaDecimal(Wire.read());
+  int horas = ConverteparaDecimal(Wire.read() & 0b111111);
+  int diadasemana = ConverteparaDecimal(Wire.read());
+  int diadomes = ConverteparaDecimal(Wire.read());
+  int mes = ConverteparaDecimal(Wire.read());
+  int ano = ConverteparaDecimal(Wire.read());
+  // Imprime mensagem na primeira linha do display
+  //lcd.setCursor(0, 1);
+  //lcd.print("DATA: ");
+
+  // Mostra a HORA atual no display
+  lcd.setCursor(0, 0);
+  lcd.print("HORA: ");
+
+  lcd.setCursor(6, 0);
+  if (horas < 10) {  lcd.print("0"); }
+  lcd.print(horas);
+
+  lcd.print(":");
+  if (minutos < 10) { lcd.print("0"); }
+  lcd.print(minutos);
+
+  lcd.print(":");
+  if (segundos < 10) { lcd.print("0"); }
+  lcd.print(segundos);
+
+
+  /*
+    fiz conforme te falei, pra vc poder informar a hora inicial e final, contudo isso incorre em um segundo problema
+    que também precisei tratar que é o fato das bombas poderem ser ligadas a partir das 10:00 até as 02:00 do outro dia, 
+    por exemplo, por isso o IF abaixo ficou um pouco extenso.
+    
+    nessa parte verifica se a hora inicial é maior ou menor que a data final (ou seja, se é no mesmo dia, ou se inicia em um dia e termina no outro)
+    (horaInicio*60+minutoInicio) < (horaFim*60+minutoFim) && 
+    
+    nessa outra parte, esta sendo verificado se a hora está no intervalo para ligar ou desligar as bombas
+    ( (horas*60+minutos) < (horaInicio*60+minutoInicio) || (horas*60+minutos) > (horaFim*60+minutoFim) )
+    
+    depois disso tem um OR
+    
+    ||
+    
+    que inverte a lógica, pra tratar da situação contrária
+    
+  */
+  
+  
+  boolean esta_agendado = false;  //variavel que verifica se algum dos horarios agendados deve ser executado.
+  
+  /* esse for percorre a lista  de horarios agendados e verifica se algum deles está no horario de executar. */
+  for (int i=0; i<QUANTIDADE_HORARIOS;i++){
+
+    boolean mesmoDia = (horarios[i].horaInicio*60+horarios[i].minutoInicio) < (horarios[i].horaFim*60+horarios[i].minutoFim); //verifica se é no mesmo dia
+  
+    if (  ( (  mesmoDia ) &&  ( (horas*60+minutos) < (horarios[i].horaInicio*60+horarios[i].minutoInicio) || (horas*60+minutos) > (horarios[i].horaFim*60+horarios[i].minutoFim-1) ) )  //se for mesmo dia
+          ||
+          ( ( !mesmoDia ) &&  ( (horas*60+minutos) < (horarios[i].horaInicio*60+horarios[i].minutoInicio) && (horas*60+minutos) > (horarios[i].horaFim*60+horarios[i].minutoFim-1) ) )  //se termina no outro dia, aplica logica contraria
+       ) 
+    {
+      esta_agendado = false;
+    } else {
+      esta_agendado = true;
+      break;
+    }
+  }
+  
+  if (!esta_agendado) {
+    digitalWrite (bomba1, LOW);
+    digitalWrite (bomba2, LOW);
+    digitalWrite (led,    LOW);
+    lcd.setCursor(0, 1);
+    lcd.print("SISTEM OFF");
+    lcd.print("              ");
+  } else {
+    // transforma a hora em minutos... 
+    // se fosse 06:20 daria 360+20 = 380
+    int minutosAtual = horas * 60 + minutos; 
+    
+    // sera utilizado o resto da divisao para sabermos qual bomba ligar    
+    //o resto da divisao sera sempre um valor entre 0 e minutosB1+MinutosB2, ou seja, 15+15=30, 
+    //por exemplo 06:20 (6*60+20=380) --> 380 % 30 = 20 --> maior que 15, significa que é pra ligar a bomba 02
+    //outro exemplo
+    // 15:37 --> 15*60 = 900 + 37 = 937
+    // 937 % 30 = sobra 07 ----> como 07 é menor que 15, então liga a bomba 01
+    int restoDivisao = minutosAtual % (minutosBomba1 + minutosBomba2); 
+    
+    digitalWrite (led,    HIGH);  //liga o led
+    
+    if (restoDivisao < minutosBomba1){
+      digitalWrite (bomba2, LOW);
+      digitalWrite (bomba1, HIGH);
+      lcd.setCursor(0, 1);
+      lcd.print("BOMBA 1 LIGADA");
+      lcd.print("              ");
+    } else {
+      digitalWrite (bomba1, LOW);
+      digitalWrite (bomba2, HIGH);
+      lcd.setCursor(0, 1);
+      lcd.print("BOMBA 2 LIGADA");
+      lcd.print("              ");  
+    } 
+  }
+  
+  
+}
